@@ -1,0 +1,19 @@
+name: Build
+on:
+    push:
+        branches:
+        - '**'
+        tags-ignore:
+        - v*
+
+jobs:
+    build:
+        name: Build Project
+        uses: UbiqueInnovation/workflows-backend/.github/workflows/mvn_install.yml@main
+        with:
+            parent_pom: ./pom.xml
+        secrets:
+            artifactory_user: ${{ secrets.UB_ARTIFACTORY_USER}}
+            artifactory_password: ${{ secrets.UB_ARTIFACTORY_PASSWORD }}
+            artifactory_url: ${{ secrets.UB_ARTIFACTORY_URL }}
+            artifactory_repo: ${{ secrets.UB_ARTIFACTORY_REPO_BACKEND }}
