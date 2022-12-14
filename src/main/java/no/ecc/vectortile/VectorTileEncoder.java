@@ -25,6 +25,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import no.ecc.vectortile.validation.CommandsValidator;
 import org.locationtech.jts.algorithm.Area;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Envelope;
@@ -392,7 +393,8 @@ public class VectorTileEncoder {
                         commands = commands(geometry);
                     }
                 }
-                
+                CommandsValidator.validate(commands, geomType);
+
                 featureBuilder.setType(geomType);
                 featureBuilder.addAllGeometry(commands);
 
