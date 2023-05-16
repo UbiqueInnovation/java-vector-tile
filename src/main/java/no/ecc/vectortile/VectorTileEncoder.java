@@ -238,6 +238,17 @@ public class VectorTileEncoder {
             return;
         }
 
+        // extra check for GeometryCollection after clipping as it can cause
+        // GeometryCollection. Subclasses not handled here.
+        if (geometry.getClass().equals(GeometryCollection.class)) {
+            for (int i = 0; i < geometry.getNumGeometries(); i++) {
+                Geometry subGeometry = geometry.getGeometryN(i);
+                // keeping the id. any better suggestion?
+                addFeature(layerName, attributes, subGeometry, id);
+            }
+            return;
+        }
+
         Layer layer = layers.get(layerName);
         if (layer == null) {
             layer = new Layer();
@@ -313,6 +324,44 @@ public class VectorTileEncoder {
     }
 
     /**
+     * Validate and potentially repair the given {@link List} of commands for the
+     * given {@link Geometry}. Will return a {@link List} of the validated and/or
+     * repaired commands.
+     * <p>
+     * This can be overridden to change behavior. By returning just the incoming
+     * {@link List} of commands instead, the encoding will be faster, but
+     * potentially less safe.
+     *
+     * @param commands
+     * @param geometry
+     * @return
+     */
+    protected List<Integer> validateAndRepairCommands(List<Integer> commands, Geometry geometry) {
+        if (commands.isEmpty()) {
+            return commands;
+        }
+
+        GeomType geomType = toGeomType(geometry);
+        if (simplificationDistanceTolerance > 0.0 && geomType == GeomType.POLYGON) {
+            double scale = autoScale ? (extent / 256.0) : 1.0;
+            Geometry decodedGeometry = VectorTileDecoder.decodeGeometry(gf, geomType, commands, scale);
+            if (!isValid(decodedGeometry)) {
+                // Invalid. Try more simplification and without preserving topology.
+                geometry = DouglasPeuckerSimplifier.simplify(geometry, simplificationDistanceTolerance * 2.0);
+                if (geometry.isEmpty()) {
+                    Collections.emptyList();
+                }
+                geomType = toGeomType(geometry);
+                x = 0;
+                y = 0;
+                return commands(geometry);
+            }
+        }
+
+        return commands;
+    }
+
+    /**
      * @return a byte array with the vector tile
      */
     public byte[] encode() {
@@ -372,27 +421,14 @@ public class VectorTileEncoder {
                 y = 0;
                 List<Integer> commands = commands(geometry);
 
+                // Extra step to parse and check validity and try to repair.
+                commands = validateAndRepairCommands(commands, geometry);
+
                 // skip features with no geometry commands
                 if (commands.isEmpty()) {
                     continue;
                 }
 
-                // Extra step to parse and check validity and try to repair. Probably expensive.
-                if (simplificationDistanceTolerance > 0.0 && geomType == GeomType.POLYGON) {
-                    double scale = autoScale ? (extent / 256.0) : 1.0;
-                    Geometry decodedGeometry = VectorTileDecoder.decodeGeometry(gf, geomType, commands, scale);
-                    if (!isValid(decodedGeometry)) {
-                        // Invalid. Try more simplification and without preserving topology.
-                        geometry = DouglasPeuckerSimplifier.simplify(geometry, simplificationDistanceTolerance * 2.0);
-                        if (geometry.isEmpty()) {
-                            continue;
-                        }
-                        geomType = toGeomType(geometry);
-                        x = 0;
-                        y = 0;
-                        commands = commands(geometry);
-                    }
-                }
                 CommandsValidator.validate(commands, geomType);
 
                 featureBuilder.setType(geomType);
@@ -460,6 +496,8 @@ public class VectorTileEncoder {
     List<Integer> commands(MultiLineString mls) {
         List<Integer> commands = new ArrayList<Integer>();
         for (int i = 0; i < mls.getNumGeometries(); i++) {
+            final int oldX = x;
+            final int oldY = y;
             final List<Integer> geomCommands =
                     commands(mls.getGeometryN(i).getCoordinates(), false);
             if (geomCommands.size() > 3) {
@@ -468,6 +506,10 @@ public class VectorTileEncoder {
                 // specifications.
                 // (https://github.com/mapbox/vector-tile-spec/tree/master/2.1#4343-linestring-geometry-type)
                 commands.addAll(geomCommands);
+            } else {
+                // reset x and y to the previous value
+                x = oldX;
+                y = oldY;
             }
         }
         return commands;

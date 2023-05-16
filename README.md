@@ -29,13 +29,13 @@ byte[] encoded = encoder.encode();
 ```
 <repository>
     <id>ECC</id>
-    <url>https://ecc-mvn.ams3.digitaloceanspaces.com/releases</url>
+    <url>https://maven.ecc.no/releases</url>
 </repository>
 
 <dependency>
     <groupId>no.ecc.vectortile</groupId>
     <artifactId>java-vector-tile</artifactId>
-    <version>1.3.21</version>
+    <version>1.3.23</version>
 </dependency>
 ```
 
